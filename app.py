@@ -1,6 +1,5 @@
 import io
 import json
-import base64
 import time
 import streamlit as st
 from PIL import Image
@@ -20,15 +19,15 @@ else:
     st.error("Kein GEMINI_API_KEY in den Streamlit Secrets gefunden!")
     st.stop()
 
-# Einbetten der Bilder aus der Vorlage (VIE Logo + Konturskizze)
-VIE_LOGO_SVG = """<svg width="140" height="45" viewBox="0 0 200 65">
+# Einbetten der Vektorgrafiken aus der Vorlage (VIE Logo + Konturskizze)
+VIE_LOGO_SVG = """<svg width="150" height="50" viewBox="0 0 200 65">
   <path d="M 10 30 L 50 10 L 60 15 L 35 32 L 60 32 L 55 40 L 10 40 Z" fill="#000"/>
   <text x="65" y="42" font-family="Helvetica, Arial, sans-serif" font-weight="bold" font-size="32">VIE</text>
   <text x="135" y="28" font-family="Helvetica, Arial, sans-serif" font-style="italic" font-weight="bold" font-size="14">Vienna</text>
   <text x="135" y="44" font-family="Helvetica, Arial, sans-serif" font-style="italic" font-weight="bold" font-size="14">Airport</text>
 </svg>"""
 
-CONTOUR_SKETCH_SVG = """<svg width="80" height="100" viewBox="0 0 100 130">
+CONTOUR_SKETCH_SVG = """<svg width="95" height="130" viewBox="0 0 100 130">
   <rect x="25" y="15" width="50" height="15" fill="none" stroke="#000" stroke-width="1.5"/>
   <text x="50" y="26" font-family="Arial" font-size="7" text-anchor="middle">hoheSeite</text>
   <polygon points="20,35 80,35 80,85 50,115 20,85" fill="none" stroke="#000" stroke-width="1.5"/>
@@ -49,22 +48,22 @@ def analyze_booking_list_with_ai(image_bytes):
     Analysiere das Bild dieser Buchungsliste / Cargo Manifest extrem genau.
 
     ANWEISUNG ZUR EXTRAKTION:
-    - Scanne die Buchungsliste nach Flugnummer (z.B. KE538) und Destination (z.B. MXP).
-    - Scanne in der Spalte "Flugdetails & Aufbau" JEDE EINZELNE ZEILE auf ULD-Nummern (z.B. PMC80397R7, PMC58968R7).
+    - Scanne die Buchungsliste nach Flugnummer (z.B. KE591) und Destination (z.B. MAD).
+    - Scanne in der Spalte "Flugdetails & Aufbau" JEDE EINZELNE ZEILE auf ULD-Nummern (z.B. PMC01886R7, PMC04410R7).
     - Verknüpfe jede ULD-Nummer mit der AWB-Nummer, Stückzahl, Gewicht und Special-Cargo-Codes.
 
     Extrahiere alle Daten und antworte STRENG im folgenden JSON-Format (kein Fließtext, kein Markdown-Codeblock):
     {
-      "flight": "KE538",
-      "dest": "MXP",
+      "flight": "KE591",
+      "dest": "MAD",
       "raw_records": [
         {
-          "uld_id": "PMC80397R7",
-          "awb": "180-54275970",
-          "pcs": "6",
-          "weight": "2639",
+          "uld_id": "PMC01886R7",
+          "awb": "180-54663243",
+          "pcs": "429",
+          "weight": "1580",
           "contour": "SCA",
-          "special": "EAW, ECC"
+          "special": "SCS, VIP"
         }
       ]
     }
@@ -174,11 +173,11 @@ if uploaded_file is not None:
         <style>
             @page {
                 size: A4 portrait;
-                margin: 6mm;
+                margin: 4mm 5mm;
             }
             body, html {
                 font-family: Helvetica, Arial, sans-serif;
-                font-size: 7.5pt;
+                font-size: 8pt;
                 color: #000000;
                 margin: 0;
                 padding: 0;
@@ -192,7 +191,7 @@ if uploaded_file is not None:
             }
             td, th {
                 border: 1px solid #000000;
-                padding: 2px 3px;
+                padding: 3px 4px;
                 vertical-align: middle;
             }
             .center { text-align: center; }
@@ -213,18 +212,18 @@ if uploaded_file is not None:
             awb_rows = ""
             for a in awb_list:
                 awb_rows += f"""
-                <tr style="height: 18px;">
-                    <td style="width: 58%; font-size: 9pt; font-weight: bold;">{a['awb']}</td>
-                    <td class="center" style="width: 17%; font-size: 9pt; font-weight: bold;">{a['pcs']}</td>
-                    <td class="center" style="width: 25%; font-size: 8pt;">{a['special']}</td>
+                <tr style="height: 22px;">
+                    <td style="width: 58%; font-size: 9.5pt; font-weight: bold;">{a['awb']}</td>
+                    <td class="center" style="width: 17%; font-size: 9.5pt; font-weight: bold;">{a['pcs']}</td>
+                    <td class="center" style="width: 25%; font-size: 8.5pt;">{a['special']}</td>
                 </tr>
                 """
             
-            # Exakt 20 AWB-Zeilen auffüllen
-            empty_rows = max(0, 20 - len(awb_list))
+            # Formular auf genau 24 Zeilen aufspannen, um die A4-Höhe komplett auszufüllen
+            empty_rows = max(0, 24 - len(awb_list))
             for _ in range(empty_rows):
                 awb_rows += """
-                <tr style="height: 18px;">
+                <tr style="height: 22px;">
                     <td>&nbsp;</td>
                     <td>&nbsp;</td>
                     <td>&nbsp;</td>
@@ -236,41 +235,41 @@ if uploaded_file is not None:
                 <!-- HEADER -->
                 <table style="margin-bottom: 0px;">
                     <tr>
-                        <td style="width: 60%; vertical-align: top; padding: 4px;">
-                            <span style="font-size: 14pt; font-weight: bold;">ULD - Statement</span> 
-                            <span style="font-size: 8.5pt; font-weight: bold;">Cargo - Handling</span><br><br>
+                        <td style="width: 60%; vertical-align: top; padding: 5px;">
+                            <span style="font-size: 15pt; font-weight: bold;">ULD - Statement</span> 
+                            <span style="font-size: 9pt; font-weight: bold;">Cargo - Handling</span><br><br>
                             Flug: <b>{flight_no if flight_no else '___________________'}</b> &nbsp;&nbsp;&nbsp;&nbsp; Dest.: <b>{dest_code if dest_code else '___________________'}</b>
                         </td>
-                        <td style="width: 40%; vertical-align: top; text-align: right; padding: 4px;">
+                        <td style="width: 40%; vertical-align: top; text-align: right; padding: 5px;">
                             {VIE_LOGO_SVG}
                         </td>
                     </tr>
                     <tr>
-                        <td style="padding: 4px;">
-                            <span style="font-size: 8pt;">ULD - Number</span><br>
-                            <span style="font-size: 9pt;">Paletten / Container: <b>{uld_id}</b></span>
+                        <td style="padding: 5px;">
+                            <span style="font-size: 8.5pt;">ULD - Number</span><br>
+                            <span style="font-size: 9.5pt;">Paletten / Container: <b style="font-size: 11pt;">{uld_id}</b></span>
                         </td>
-                        <td style="padding: 2px; font-size: 6.5pt;">
+                        <td style="padding: 2px; font-size: 7pt;">
                             <table style="border: none; width: 100%;">
                                 <tr><td style="border: none; padding: 1px;" colspan="2"><b>ULD CHECKED FOR DAMAGES</b></td></tr>
                                 <tr><td style="border: none; padding: 1px;" colspan="2"><b>HEIGHT CHECK PERFORMED</b></td></tr>
                                 <tr><td style="border: none; padding: 1px;" colspan="2"><span class="small-text">Check and ensure airworthiness of BUP/TRU</span></td></tr>
                                 <tr>
-                                    <td class="center" style="border: 1px solid #000; width: 50%;">OK</td>
-                                    <td class="center" style="border: 1px solid #000; width: 50%;">NOT OK</td>
+                                    <td class="center" style="border: 1px solid #000; width: 50%; padding: 2px;">OK</td>
+                                    <td class="center" style="border: 1px solid #000; width: 50%; padding: 2px;">NOT OK</td>
                                 </tr>
                             </table>
                         </td>
                     </tr>
                 </table>
 
-                <!-- ZWEISPALTTIGER MITTELTEIL -->
+                <!-- ZWEISPALTTIGER MITTELTEIL (GUESTRECKT) -->
                 <table style="margin-top: -1px;">
                     <tr>
                         <!-- LINKS: AWB TABELLE -->
                         <td style="width: 60%; vertical-align: top; padding: 0px; border: none;">
                             <table style="width: 100%;">
-                                <tr class="header-bg" style="height: 22px;">
+                                <tr class="header-bg" style="height: 24px;">
                                     <td style="width: 58%;">Air Waybill</td>
                                     <td style="width: 17%;">Pcs<br><span class="small-text">Stück</span></td>
                                     <td style="width: 25%;">Special-<br>Cargo</td>
@@ -283,36 +282,36 @@ if uploaded_file is not None:
                         <td style="width: 40%; vertical-align: top; padding: 0px; border: none;">
                             <table style="width: 100%;">
                                 <tr>
-                                    <td class="right" style="border-bottom: none; font-size: 6pt;">fache Seite</td>
+                                    <td class="right" style="border-bottom: none; font-size: 6.5pt;">fache Seite</td>
                                 </tr>
                                 <tr>
-                                    <td class="center" style="height: 110px;">
+                                    <td class="center" style="height: 155px;">
                                         {CONTOUR_SKETCH_SVG}
                                     </td>
                                 </tr>
-                                <tr class="header-bg">
+                                <tr class="header-bg" style="height: 22px;">
                                     <td class="center">Lagerplatz</td>
                                 </tr>
                             </table>
 
                             <table style="width: 100%; margin-top: -1px;">
                                 <tr>
-                                    <td style="font-size: 6.5pt;">Perisha</td>
+                                    <td style="font-size: 7pt; height: 20px;">Perisha</td>
                                     <td class="center" style="width: 12%;">1</td>
                                     <td class="center" style="width: 12%;">2</td>
                                     <td class="center" style="width: 12%;">3</td>
                                     <td class="center" style="width: 12%;">4</td>
                                     <td class="center" style="width: 12%;">5</td>
                                 </tr>
-                                <tr><td colspan="5" style="font-size: 6.5pt; height: 16px;">Fremdhandling Vorhaltefläche</td><td style="width: 12%;">&nbsp;</td></tr>
-                                <tr><td colspan="5" style="font-size: 6.5pt; height: 16px;">LCAG Vorhaltefläche</td><td style="width: 12%;">&nbsp;</td></tr>
-                                <tr><td colspan="5" style="font-size: 6.5pt; height: 16px;">LCAG Warehouse</td><td style="width: 12%;">&nbsp;</td></tr>
-                                <tr><td colspan="5" style="font-size: 6.5pt; height: 16px;">Stückgut Vorhaltefläche</td><td style="width: 12%;">&nbsp;</td></tr>
-                                <tr><td colspan="5" style="font-size: 6.5pt; height: 16px;">Stückgut Warehouse</td><td style="width: 12%;">&nbsp;</td></tr>
-                                <tr><td colspan="5" style="font-size: 6.5pt; height: 16px;">Trucking Vorhaltefläche</td><td style="width: 12%;">&nbsp;</td></tr>
-                                <tr><td colspan="5" style="font-size: 6.5pt; height: 16px;">Breakdown</td><td style="width: 12%;">&nbsp;</td></tr>
-                                <tr><td colspan="5" style="font-size: 6.5pt; height: 16px;">Disponent Büro</td><td style="width: 12%;">&nbsp;</td></tr>
-                                <tr><td colspan="6" style="font-size: 6.5pt; height: 20px;">Sonstiger Lagerplatz: ___________________</td></tr>
+                                <tr><td colspan="5" style="font-size: 7pt; height: 20px;">Fremdhandling Vorhaltefläche</td><td style="width: 12%;">&nbsp;</td></tr>
+                                <tr><td colspan="5" style="font-size: 7pt; height: 20px;">LCAG Vorhaltefläche</td><td style="width: 12%;">&nbsp;</td></tr>
+                                <tr><td colspan="5" style="font-size: 7pt; height: 20px;">LCAG Warehouse</td><td style="width: 12%;">&nbsp;</td></tr>
+                                <tr><td colspan="5" style="font-size: 7pt; height: 20px;">Stückgut Vorhaltefläche</td><td style="width: 12%;">&nbsp;</td></tr>
+                                <tr><td colspan="5" style="font-size: 7pt; height: 20px;">Stückgut Warehouse</td><td style="width: 12%;">&nbsp;</td></tr>
+                                <tr><td colspan="5" style="font-size: 7pt; height: 20px;">Trucking Vorhaltefläche</td><td style="width: 12%;">&nbsp;</td></tr>
+                                <tr><td colspan="5" style="font-size: 7pt; height: 20px;">Breakdown</td><td style="width: 12%;">&nbsp;</td></tr>
+                                <tr><td colspan="5" style="font-size: 7pt; height: 20px;">Disponent Büro</td><td style="width: 12%;">&nbsp;</td></tr>
+                                <tr><td colspan="6" style="font-size: 7pt; height: 26px;">Sonstiger Lagerplatz: ___________________</td></tr>
                             </table>
                         </td>
                     </tr>
@@ -324,28 +323,28 @@ if uploaded_file is not None:
                         <!-- KONTUR & MATERIALIEN -->
                         <td style="width: 60%; vertical-align: top; padding: 0px;">
                             <table style="width: 100%;">
-                                <tr class="header-bg">
-                                    <td colspan="4">KONTUR: <b>{contour}</b></td>
+                                <tr class="header-bg" style="height: 22px;">
+                                    <td colspan="4">KONTUR: <b style="font-size: 10pt;">{contour}</b></td>
                                 </tr>
                                 <tr>
-                                    <td style="width: 25%; font-size: 6.5pt; height: 18px;">Stricke</td>
-                                    <td style="width: 25%; font-size: 6.5pt;">Gurten</td>
-                                    <td style="width: 25%; font-size: 6.5pt;">EURO - Pal.</td>
-                                    <td style="width: 25%; font-size: 6.5pt;">Verzurrösen</td>
+                                    <td style="width: 25%; font-size: 7pt; height: 22px;">Stricke</td>
+                                    <td style="width: 25%; font-size: 7pt;">Gurten</td>
+                                    <td style="width: 25%; font-size: 7pt;">EURO - Pal.</td>
+                                    <td style="width: 25%; font-size: 7pt;">Verzurrösen</td>
                                 </tr>
                                 <tr>
-                                    <td style="font-size: 6.5pt; height: 18px;">Bretter 1,30m</td>
-                                    <td style="font-size: 6.5pt;">Bretter 2,00m</td>
-                                    <td style="font-size: 6.5pt;">Bretter 2,20m</td>
-                                    <td style="font-size: 6.5pt;">Bretter 2,90m</td>
+                                    <td style="font-size: 7pt; height: 22px;">Bretter 1,30m</td>
+                                    <td style="font-size: 7pt;">Bretter 2,00m</td>
+                                    <td style="font-size: 7pt;">Bretter 2,20m</td>
+                                    <td style="font-size: 7pt;">Bretter 2,90m</td>
                                 </tr>
                                 <tr>
-                                    <td colspan="4" style="height: 22px; vertical-align: top; font-size: 6.5pt;">
+                                    <td colspan="4" style="height: 28px; vertical-align: top; font-size: 7.5pt; padding: 4px;">
                                         Name / PersNr.: ________________________
                                     </td>
                                 </tr>
                                 <tr>
-                                    <td colspan="4" style="height: 22px; vertical-align: top; font-size: 6.5pt;">
+                                    <td colspan="4" style="height: 28px; vertical-align: top; font-size: 7.5pt; padding: 4px;">
                                         Unterschrift DG: ________________________
                                     </td>
                                 </tr>
@@ -356,27 +355,23 @@ if uploaded_file is not None:
                         <td style="width: 40%; vertical-align: top; padding: 0px;">
                             <table style="width: 100%; height: 100%;">
                                 <tr>
-                                    <td style="height: 40px; vertical-align: top; padding: 4px;">
-                                        <b>Grossweight</b><br>
-                                        <b>Bruttogewicht:</b> <span style="font-size: 10pt; font-weight: bold;">{weight} kg</span>
+                                    <td style="height: 44px; vertical-align: top; padding: 5px;">
+                                        <b style="font-size: 9pt;">Grossweight</b><br>
+                                        <b>Bruttogewicht:</b> <span style="font-size: 11pt; font-weight: bold;">{weight} kg</span>
                                     </td>
                                 </tr>
                                 <tr>
-                                    <td style="height: 22px; vertical-align: top; font-size: 6.5pt;">
-                                        Name / PersNr.: ________________________
-                                    </td>
+                                    <td style="height: 28px; vertical-align: top; font-size: 7.5pt; padding: 4px;">Name / PersNr.: ________________________</td>
                                 </tr>
                                 <tr>
-                                    <td style="height: 22px; vertical-align: top; font-size: 6.5pt;">
-                                        Unterschrift MA: ________________________
-                                    </td>
+                                    <td style="height: 28px; vertical-align: top; font-size: 7.5pt; padding: 4px;"><b>Unterschrift MA:</b> ________________________</td>
                                 </tr>
                             </table>
                         </td>
                     </tr>
                 </table>
 
-                <div class="small-text" style="margin-top: 2px;">Form 752z/25 vie</div>
+                <div class="small-text" style="margin-top: 3px;">Form 752z/25 vie</div>
             </div>
             """
             html_pages.append(page_html)
