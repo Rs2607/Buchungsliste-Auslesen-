@@ -1,5 +1,3 @@
-tesseract-ocr
-tesseract-ocr-deu
 libgdk-pixbuf-2.0-0
 libpango-1.0-0
 libcairo2
