@@ -54,14 +54,14 @@ def analyze_booking_list_with_ai(image_bytes):
     4. Gib ausschließlich valides JSON zurück.
     """
     
-    # Gültige Modellnamen in der aktuellen Google GenAI SDK
-    models_to_try = ["gemini-2.0-flash-lite", "gemini-2.0-flash"]
+    # Aktuelle, unterstützte Modellnamen von Google
+    models_to_try = ["gemini-3.5-flash-lite", "gemini-3.6-flash"]
     
     response = None
     last_exception = None
 
     for model_name in models_to_try:
-        # Bis zu 2 Versuche bei temporärer Überlastung
+        # Bis zu 2 Versuche pro Modell bei Auslastung
         for attempt in range(2):
             try:
                 response = client.models.generate_content(
@@ -72,9 +72,9 @@ def analyze_booking_list_with_ai(image_bytes):
                     break
             except APIError as e:
                 last_exception = e
-                # Bei Überlastung (503) kurz warten und wiederholen
+                # Bei hoher Auslastung (503) kurz warten und neu versuchen
                 if getattr(e, 'code', None) == 503 or "503" in str(e):
-                    time.sleep(2)
+                    time.sleep(1.5)
                     continue
                 else:
                     break
