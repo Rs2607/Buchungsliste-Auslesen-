@@ -191,7 +191,7 @@ if uploaded_file is not None:
             }
             td, th {
                 border: 1px solid #000000;
-                padding: 3px 4px;
+                padding: 2px 4px;
                 vertical-align: middle;
             }
             .center { text-align: center; }
@@ -213,9 +213,9 @@ if uploaded_file is not None:
             for a in awb_list:
                 awb_rows += f"""
                 <tr style="height: 23px;">
-                    <td style="width: 58%; font-size: 12pt; font-weight: bold; padding-left: 6px;">{a['awb']}</td>
-                    <td class="center" style="width: 17%; font-size: 11pt; font-weight: bold;">{a['pcs']}</td>
-                    <td class="center" style="width: 25%; font-size: 9.5pt;">{a['special']}</td>
+                    <td style="width: 58%; font-size: 16pt; font-weight: bold; padding-left: 4px;">{a['awb']}</td>
+                    <td class="center" style="width: 17%; font-size: 10pt; font-weight: bold;">{a['pcs']}</td>
+                    <td class="center" style="width: 25%; font-size: 8.5pt;">{a['special']}</td>
                 </tr>
                 """
             
