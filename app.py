@@ -1,32 +1,74 @@
 import io
+import json
 import re
-from collections import defaultdict
 import streamlit as st
-from PIL import Image, ImageEnhance, ImageOps
-import pytesseract
+from PIL import Image
+from google import genai
 from xhtml2pdf import pisa
 
 # Page Configuration
-st.set_page_config(page_title="ULD Statement Generator", page_icon="📦", layout="centered")
+st.set_page_config(page_title="ULD Statement Generator AI", page_icon="📦", layout="centered")
 
-st.title("📦 ULD Statement Generator")
-st.write("Lade ein Foto der Buchungsliste hoch, um automatisch PDF-Statements zu generieren.")
+st.title("📦 ULD Statement Generator (AI)")
+st.write("Foto der Buchungsliste hochladen – Gemini liest die ULDs und AWBs automatisch aus.")
 
-# Fast OCR function with caching
-@st.cache_data(show_spinner=False)
-def run_cached_ocr(image_bytes):
+# API Key check from Streamlit Secrets
+if "GEMINI_API_KEY" in st.secrets:
+    client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
+else:
+    st.error("Kein GEMINI_API_KEY in den Streamlit Secrets gefunden!")
+    st.stop()
+
+def analyze_booking_list_with_ai(image_bytes):
     img = Image.open(io.BytesIO(image_bytes))
-    # Resize to speed up processing
-    img.thumbnail((1500, 1500))
-    # Image enhancement for better OCR results
-    gray_img = ImageOps.grayscale(img)
-    enhancer = ImageEnhance.Contrast(gray_img)
-    processed_img = enhancer.enhance(2.0)
+    # Skalierung auf max. 1600px für schnelle Übertragung und RAM-Schonung
+    img.thumbnail((1600, 1600))
     
-    custom_config = r'--oem 3 --psm 6'
-    return pytesseract.image_to_string(processed_img, config=custom_config)
+    prompt = """
+    Du bist ein Experte für Air Cargo Handling am Flughafen (ULD Processing).
+    Analysiere das Bild dieser Buchungsliste / Cargo Manifest.
 
-# File Uploader
+    Extrahiere alle Daten und antworte STRENG im folgenden JSON-Format (kein Fließtext, kein Markdown-Codeblock):
+    {
+      "ulds": [
+        {
+          "uld_id": "PMC01886R7",
+          "contour": "SCA",
+          "weight": "1580",
+          "awbs": [
+            {
+              "awb": "180-54666065",
+              "pcs": "1",
+              "special": "-"
+            }
+          ]
+        }
+      ]
+    }
+
+    Regeln:
+    1. Identifiziere ULDs (z. B. PMC, PLA, AKE, AKH) und erstelle für jeden ULD einen Eintrag.
+    2. Wenn ein ULD mehrere AWBs enthält, ordne alle AWBs diesem ULD zu.
+    3. Bereinige Konturbezeichnungen (z. B. "SCA-T(2)" -> "SCA").
+    4. Gib ausschließlich valides JSON zurück.
+    """
+    
+    # Aufruf des leichtgewichtigen Gemini 2.0 Flash Lite Modells
+    response = client.models.generate_content(
+        model="gemini-2.0-flash-lite",
+        contents=[img, prompt]
+    )
+    
+    raw_text = response.text.strip()
+    # Entferne evtl. vorhandene Markdown-Tags
+    if raw_text.startswith("```json"):
+        raw_text = raw_text[7:-3].strip()
+    elif raw_text.startswith("```"):
+        raw_text = raw_text[3:-3].strip()
+        
+    return json.loads(raw_text)
+
+# File Uploader Widget
 uploaded_file = st.file_uploader(
     "Foto der Buchungsliste hochladen", 
     type=["jpg", "jpeg", "png"],
@@ -34,53 +76,21 @@ uploaded_file = st.file_uploader(
 )
 
 if uploaded_file is not None:
-    # Read bytes for caching
     input_bytes = uploaded_file.read()
     image = Image.open(io.BytesIO(input_bytes))
     
     st.image(image, caption="Hochgeladene Buchungsliste", use_container_width=True)
 
-    with st.spinner("Lese Text aus dem Foto (OCR)..."):
-        extracted_text = run_cached_ocr(input_bytes)
-
-    # Editable text area
-    text_input = st.text_area(
-        "Erkannter Text (hier bei Bedarf korrigieren):", 
-        value=extracted_text, 
-        height=200,
-        key="ocr_text_area"
-    )
-
-    # RegEx Patterns
-    uld_pattern = re.compile(r'\b([A-Z]{3}\s?\d{5}[A-Z0-9]{1,2})\b')
-    awb_pattern = re.compile(r'\b(\d{3}[\s-]?\d{8})\b')
-
-    ulds = defaultdict(lambda: {'awbs': [], 'weight': '0', 'contour': '-'})
-
-    lines = text_input.split('\n')
-    current_uld = None
-
-    for line in lines:
-        line_clean = line.strip()
-        if not line_clean:
-            continue
-
-        uld_match = uld_pattern.search(line_clean)
-        if uld_match:
-            current_uld = uld_match.group(1).replace(" ", "")
-
-        awb_match = awb_pattern.search(line_clean)
-        if awb_match and current_uld:
-            awb_no = awb_match.group(1)
-            ulds[current_uld]['awbs'].append({
-                'awb': awb_no,
-                'pcs': '1',
-                'special': '-'
-            })
+    with st.spinner("Gemini Flash Lite liest die Daten aus..."):
+        try:
+            data = analyze_booking_list_with_ai(input_bytes)
+            ulds = data.get("ulds", [])
+            st.success(f"Analyse erfolgreich! Gefundene ULDs: {len(ulds)}")
+        except Exception as e:
+            st.error(f"Fehler bei der KI-Analyse: {e}")
+            st.stop()
 
     if ulds:
-        st.success(f"Gefundene ULDs: {len(ulds)}")
-        
         css_style = """
         <style>
             @page { size: A4 portrait; margin: 4mm 5mm; }
@@ -94,17 +104,23 @@ if uploaded_file is not None:
         """
 
         html_pages = []
-        for uld_id, item in ulds.items():
+        for item in ulds:
+            uld_id = item.get("uld_id", "-")
+            contour = item.get("contour", "-")
+            weight = item.get("weight", "0")
+            awb_list = item.get("awbs", [])
+
             awb_rows = ""
-            for a in item['awbs']:
+            for a in awb_list:
                 awb_rows += f"""
                 <tr>
-                    <td style="height: 18.5px; font-size: 9pt;">{a['awb']}</td>
-                    <td class="center" style="font-size: 9pt;">{a['pcs']}</td>
-                    <td class="center" style="font-size: 8pt;">{a['special']}</td>
+                    <td style="height: 18.5px; font-size: 9pt;">{a.get('awb', '')}</td>
+                    <td class="center" style="font-size: 9pt;">{a.get('pcs', '')}</td>
+                    <td class="center" style="font-size: 8pt;">{a.get('special', '-')}</td>
                 </tr>
                 """
-            for _ in range(max(0, 32 - len(item['awbs']))):
+            # Auffüllen leerer Zeilen für sauberes A4-Layout
+            for _ in range(max(0, 32 - len(awb_list))):
                 awb_rows += '<tr><td style="height: 18.5px;"></td><td></td><td></td></tr>'
 
             page_html = f"""
@@ -140,8 +156,8 @@ if uploaded_file is not None:
                 </table>
                 <table>
                     <tr>
-                        <td><b>KONTUR:</b> {item['contour']}</td>
-                        <td><b>Bruttogewicht:</b> {item['weight']} kg</td>
+                        <td><b>KONTUR:</b> {contour}</td>
+                        <td><b>Bruttogewicht:</b> {weight} kg</td>
                     </tr>
                 </table>
             </div>
@@ -150,7 +166,7 @@ if uploaded_file is not None:
 
         full_html = f"<!DOCTYPE html><html><head><meta charset='UTF-8'>{css_style}</head><body>{''.join(html_pages)}</body></html>"
 
-        # Generate PDF using xhtml2pdf
+        # PDF Generierung mit xhtml2pdf
         pdf_buffer = io.BytesIO()
         pisa.CreatePDF(full_html, dest=pdf_buffer)
         pdf_bytes = pdf_buffer.getvalue()
@@ -162,5 +178,3 @@ if uploaded_file is not None:
             mime="application/pdf",
             key="pdf_download_btn"
         )
-    else:
-        st.warning("Keine gültigen ULD-Nummern oder AWBs im Bild erkannt. Bitte passe den Text im Feld oben manuell an.")
