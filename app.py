@@ -213,9 +213,9 @@ if uploaded_file is not None:
             for a in awb_list:
                 awb_rows += f"""
                 <tr style="height: 23px;">
-                    <td style="width: 58%; font-size: 10pt; font-weight: bold; padding-left: 4px;">{a['awb']}</td>
-                    <td class="center" style="width: 17%; font-size: 10pt; font-weight: bold;">{a['pcs']}</td>
-                    <td class="center" style="width: 25%; font-size: 8.5pt;">{a['special']}</td>
+                    <td style="width: 62%; font-size: 14pt; font-weight: bold; padding-left: 4px;">{a['awb']}</td>
+                    <td class="center" style="width: 15%; font-size: 10pt; font-weight: bold;">{a['pcs']}</td>
+                    <td class="center" style="width: 23%; font-size: 8.5pt;">{a['special']}</td>
                 </tr>
                 """
             
@@ -270,9 +270,9 @@ if uploaded_file is not None:
                         <td style="width: 60%; vertical-align: top; padding: 0px; border: none;">
                             <table style="width: 100%;">
                                 <tr class="header-bg" style="height: 26px;">
-                                    <td style="width: 58%; font-size: 10pt;">Air Waybill</td>
-                                    <td style="width: 17%; font-size: 9pt;">Pcs<br><span class="small-text">Stück</span></td>
-                                    <td style="width: 25%; font-size: 9pt;">Special-<br>Cargo</td>
+                                    <td style="width: 62%; font-size: 10pt;">Air Waybill</td>
+                                    <td style="width: 15%; font-size: 9pt;">Pcs<br><span class="small-text">Stück</span></td>
+                                    <td style="width: 23%; font-size: 9pt;">Special-<br>Cargo</td>
                                 </tr>
                                 {awb_rows}
                             </table>
