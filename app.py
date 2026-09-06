@@ -213,13 +213,13 @@ if uploaded_file is not None:
             for a in awb_list:
                 awb_rows += f"""
                 <tr style="height: 23px;">
-                    <td style="width: 58%; font-size: 10pt; font-weight: bold;">{a['awb']}</td>
-                    <td class="center" style="width: 17%; font-size: 10pt; font-weight: bold;">{a['pcs']}</td>
-                    <td class="center" style="width: 25%; font-size: 9pt;">{a['special']}</td>
+                    <td style="width: 58%; font-size: 12pt; font-weight: bold; padding-left: 6px;">{a['awb']}</td>
+                    <td class="center" style="width: 17%; font-size: 11pt; font-weight: bold;">{a['pcs']}</td>
+                    <td class="center" style="width: 25%; font-size: 9.5pt;">{a['special']}</td>
                 </tr>
                 """
             
-            # Exakt 32 Zeilen aufbauen, um das Formular um 10cm nach unten zu strecken
+            # 32 Zeilen auffüllen
             empty_rows = max(0, 32 - len(awb_list))
             for _ in range(empty_rows):
                 awb_rows += """
@@ -263,16 +263,16 @@ if uploaded_file is not None:
                     </tr>
                 </table>
 
-                <!-- ZWEISPALTTIGER MITTELTEIL (STARK GUESTRECKT) -->
+                <!-- ZWEISPALTTIGER MITTELTEIL -->
                 <table style="margin-top: -1px;">
                     <tr>
                         <!-- LINKS: AWB TABELLE -->
                         <td style="width: 60%; vertical-align: top; padding: 0px; border: none;">
                             <table style="width: 100%;">
                                 <tr class="header-bg" style="height: 26px;">
-                                    <td style="width: 58%;">Air Waybill</td>
-                                    <td style="width: 17%;">Pcs<br><span class="small-text">Stück</span></td>
-                                    <td style="width: 25%;">Special-<br>Cargo</td>
+                                    <td style="width: 58%; font-size: 10pt;">Air Waybill</td>
+                                    <td style="width: 17%; font-size: 9pt;">Pcs<br><span class="small-text">Stück</span></td>
+                                    <td style="width: 25%; font-size: 9pt;">Special-<br>Cargo</td>
                                 </tr>
                                 {awb_rows}
                             </table>
@@ -290,7 +290,7 @@ if uploaded_file is not None:
                                     </td>
                                 </tr>
                                 <tr class="header-bg" style="height: 24px;">
-                                    <td class="center">Lagerplatz</td>
+                                    <td class="center" style="font-size: 10pt;">Lagerplatz</td>
                                 </tr>
                             </table>
 
@@ -324,7 +324,7 @@ if uploaded_file is not None:
                         <td style="width: 60%; vertical-align: top; padding: 0px;">
                             <table style="width: 100%;">
                                 <tr class="header-bg" style="height: 24px;">
-                                    <td colspan="4">KONTUR: <b style="font-size: 11pt;">{contour}</b></td>
+                                    <td colspan="4" style="font-size: 10pt;">KONTUR: <b style="font-size: 11pt;">{contour}</b></td>
                                 </tr>
                                 <tr>
                                     <td style="width: 25%; font-size: 7.5pt; height: 24px;">Stricke</td>
