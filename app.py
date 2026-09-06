@@ -54,14 +54,14 @@ def analyze_booking_list_with_ai(image_bytes):
     4. Gib ausschließlich valides JSON zurück.
     """
     
-    # Liste von Modellen für Fallback bei Überlastung (503)
-    models_to_try = ["gemini-2.0-flash-lite", "gemini-2.0-flash", "gemini-1.5-flash"]
+    # Gültige Modellnamen in der aktuellen Google GenAI SDK
+    models_to_try = ["gemini-2.0-flash-lite", "gemini-2.0-flash"]
     
     response = None
     last_exception = None
 
     for model_name in models_to_try:
-        # Bis zu 2 Versuche pro Modell bei temporärer Überlastung
+        # Bis zu 2 Versuche bei temporärer Überlastung
         for attempt in range(2):
             try:
                 response = client.models.generate_content(
@@ -72,9 +72,9 @@ def analyze_booking_list_with_ai(image_bytes):
                     break
             except APIError as e:
                 last_exception = e
-                # Bei 503 kurz warten und neu versuchen
+                # Bei Überlastung (503) kurz warten und wiederholen
                 if getattr(e, 'code', None) == 503 or "503" in str(e):
-                    time.sleep(1.5)
+                    time.sleep(2)
                     continue
                 else:
                     break
@@ -86,7 +86,7 @@ def analyze_booking_list_with_ai(image_bytes):
             break
 
     if not response or not response.text:
-        raise RuntimeError(f"Alle KI-Modelle derzeit überlastet. Bitte erneut versuchen. ({last_exception})")
+        raise RuntimeError(f"Anfrage konnte nicht verarbeitet werden: {last_exception}")
 
     raw_text = response.text.strip()
     if raw_text.startswith("```json"):
