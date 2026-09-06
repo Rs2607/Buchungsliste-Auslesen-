@@ -53,9 +53,9 @@ def analyze_booking_list_with_ai(image_bytes):
     4. Gib ausschließlich valides JSON zurück.
     """
     
-    # Aufruf des leichtgewichtigen Gemini 2.0 Flash Lite Modells
+    # Aufruf des Gemini 3.5 Flash Lite Modells
     response = client.models.generate_content(
-        model="gemini-2.0-flash-lite",
+        model="gemini-3.5-flash-lite",
         contents=[img, prompt]
     )
     
