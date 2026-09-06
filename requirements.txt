@@ -5,3 +5,4 @@ google-generativeai
 pytesseract
 easyocr
 torch
+opencv-python-headless
