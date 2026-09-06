@@ -1,5 +1,6 @@
 import io
 import json
+import base64
 import time
 import streamlit as st
 from PIL import Image
@@ -18,6 +19,26 @@ if "GEMINI_API_KEY" in st.secrets:
 else:
     st.error("Kein GEMINI_API_KEY in den Streamlit Secrets gefunden!")
     st.stop()
+
+# Einbetten der Bilder aus der Vorlage (VIE Logo + Konturskizze)
+VIE_LOGO_SVG = """<svg width="140" height="45" viewBox="0 0 200 65">
+  <path d="M 10 30 L 50 10 L 60 15 L 35 32 L 60 32 L 55 40 L 10 40 Z" fill="#000"/>
+  <text x="65" y="42" font-family="Helvetica, Arial, sans-serif" font-weight="bold" font-size="32">VIE</text>
+  <text x="135" y="28" font-family="Helvetica, Arial, sans-serif" font-style="italic" font-weight="bold" font-size="14">Vienna</text>
+  <text x="135" y="44" font-family="Helvetica, Arial, sans-serif" font-style="italic" font-weight="bold" font-size="14">Airport</text>
+</svg>"""
+
+CONTOUR_SKETCH_SVG = """<svg width="80" height="100" viewBox="0 0 100 130">
+  <rect x="25" y="15" width="50" height="15" fill="none" stroke="#000" stroke-width="1.5"/>
+  <text x="50" y="26" font-family="Arial" font-size="7" text-anchor="middle">hoheSeite</text>
+  <polygon points="20,35 80,35 80,85 50,115 20,85" fill="none" stroke="#000" stroke-width="1.5"/>
+  <line x1="20" y1="60" x2="80" y2="60" stroke="#000" stroke-width="1" stroke-dasharray="3,3"/>
+  <rect x="62" y="40" width="16" height="10" fill="#fff" stroke="#000" stroke-width="0.5"/>
+  <text x="70" y="47" font-family="Arial" font-size="4" text-anchor="middle">OHG FWD/AFT</text>
+  <rect x="62" y="68" width="16" height="10" fill="#fff" stroke="#000" stroke-width="0.5"/>
+  <text x="70" y="75" font-family="Arial" font-size="4" text-anchor="middle">OHG FWD/AFT</text>
+  <circle cx="50" cy="118" r="4" fill="none" stroke="#000" stroke-width="1.5"/>
+</svg>"""
 
 def analyze_booking_list_with_ai(image_bytes):
     img = Image.open(io.BytesIO(image_bytes))
@@ -153,7 +174,7 @@ if uploaded_file is not None:
         <style>
             @page {
                 size: A4 portrait;
-                margin: 5mm;
+                margin: 6mm;
             }
             body, html {
                 font-family: Helvetica, Arial, sans-serif;
@@ -171,23 +192,14 @@ if uploaded_file is not None:
             }
             td, th {
                 border: 1px solid #000000;
-                padding: 2px 4px;
+                padding: 2px 3px;
                 vertical-align: middle;
             }
             .center { text-align: center; }
             .right { text-align: right; }
             .bold { font-weight: bold; }
             .header-bg { background-color: #e0e0e0; font-weight: bold; text-align: center; }
-            .check-box { width: 11px; height: 11px; border: 1px solid #000; display: inline-block; }
-            .small-text { font-size: 6pt; }
-            
-            /* SVG Kontur-Skizze im echten Formularstil */
-            .contour-sketch {
-                width: 70px;
-                height: 90px;
-                margin: 0 auto;
-                display: block;
-            }
+            .small-text { font-size: 6.5pt; }
         </style>
         """
 
@@ -208,7 +220,7 @@ if uploaded_file is not None:
                 </tr>
                 """
             
-            # Formular auf genau 20 AWB-Zeilen aufspannen (Exakte Ausrichtung an der Vorlage)
+            # Exakt 20 AWB-Zeilen auffüllen
             empty_rows = max(0, 20 - len(awb_list))
             for _ in range(empty_rows):
                 awb_rows += """
@@ -221,17 +233,16 @@ if uploaded_file is not None:
 
             page_html = f"""
             <div class="page-container">
-                <!-- OBERER HEADER BLOCK -->
+                <!-- HEADER -->
                 <table style="margin-bottom: 0px;">
                     <tr>
                         <td style="width: 60%; vertical-align: top; padding: 4px;">
                             <span style="font-size: 14pt; font-weight: bold;">ULD - Statement</span> 
-                            <span style="font-size: 8pt; font-weight: bold;">Cargo - Handling</span><br><br>
-                            Flug: ___________________ &nbsp;&nbsp;&nbsp;&nbsp; Dest.: ___________________
+                            <span style="font-size: 8.5pt; font-weight: bold;">Cargo - Handling</span><br><br>
+                            Flug: <b>{flight_no if flight_no else '___________________'}</b> &nbsp;&nbsp;&nbsp;&nbsp; Dest.: <b>{dest_code if dest_code else '___________________'}</b>
                         </td>
                         <td style="width: 40%; vertical-align: top; text-align: right; padding: 4px;">
-                            <span style="font-size: 18pt; font-weight: bold;">VIE</span><br>
-                            <span style="font-size: 8pt;">Vienna Airport</span>
+                            {VIE_LOGO_SVG}
                         </td>
                     </tr>
                     <tr>
@@ -241,8 +252,8 @@ if uploaded_file is not None:
                         </td>
                         <td style="padding: 2px; font-size: 6.5pt;">
                             <table style="border: none; width: 100%;">
-                                <tr><td style="border: none; padding: 1px;" colspan="2">ULD CHECKED FOR DAMAGES</td></tr>
-                                <tr><td style="border: none; padding: 1px;" colspan="2">HEIGHT CHECK PERFORMED</td></tr>
+                                <tr><td style="border: none; padding: 1px;" colspan="2"><b>ULD CHECKED FOR DAMAGES</b></td></tr>
+                                <tr><td style="border: none; padding: 1px;" colspan="2"><b>HEIGHT CHECK PERFORMED</b></td></tr>
                                 <tr><td style="border: none; padding: 1px;" colspan="2"><span class="small-text">Check and ensure airworthiness of BUP/TRU</span></td></tr>
                                 <tr>
                                     <td class="center" style="border: 1px solid #000; width: 50%;">OK</td>
@@ -253,10 +264,10 @@ if uploaded_file is not None:
                     </tr>
                 </table>
 
-                <!-- MITTELTEIL: ZWEISPALTTIGES RASTER -->
+                <!-- ZWEISPALTTIGER MITTELTEIL -->
                 <table style="margin-top: -1px;">
                     <tr>
-                        <!-- LINKE SPALTE: AWB TABELLE (60% BREITE) -->
+                        <!-- LINKS: AWB TABELLE -->
                         <td style="width: 60%; vertical-align: top; padding: 0px; border: none;">
                             <table style="width: 100%;">
                                 <tr class="header-bg" style="height: 22px;">
@@ -268,7 +279,7 @@ if uploaded_file is not None:
                             </table>
                         </td>
 
-                        <!-- RECHTE SPALTE: SKIZZE & LAGERPLATZ (40% BREITE) -->
+                        <!-- RECHTS: SKIZZE & LAGERPLATZ -->
                         <td style="width: 40%; vertical-align: top; padding: 0px; border: none;">
                             <table style="width: 100%;">
                                 <tr>
@@ -276,13 +287,7 @@ if uploaded_file is not None:
                                 </tr>
                                 <tr>
                                     <td class="center" style="height: 110px;">
-                                        <!-- SVG Konturskizze -->
-                                        <svg class="contour-sketch" viewBox="0 0 100 130">
-                                            <polygon points="25,40 75,40 90,80 75,110 25,110 10,80" fill="none" stroke="#000" stroke-width="2"/>
-                                            <line x1="25" y1="40" x2="25" y2="110" stroke="#000" stroke-width="1" stroke-dasharray="2,2"/>
-                                            <line x1="75" y1="40" x2="75" y2="110" stroke="#000" stroke-width="1" stroke-dasharray="2,2"/>
-                                            <circle cx="50" cy="115" r="4" fill="#000"/>
-                                        </svg>
+                                        {CONTOUR_SKETCH_SVG}
                                     </td>
                                 </tr>
                                 <tr class="header-bg">
@@ -313,10 +318,10 @@ if uploaded_file is not None:
                     </tr>
                 </table>
 
-                <!-- UNTERER BLOCK: KONTUR / GEWICHT / UNTERSCHRIFTEN -->
+                <!-- FOOTER BLOCK -->
                 <table style="margin-top: -1px;">
                     <tr>
-                        <!-- KONTUR & MATERIALIEN (60% BREITE) -->
+                        <!-- KONTUR & MATERIALIEN -->
                         <td style="width: 60%; vertical-align: top; padding: 0px;">
                             <table style="width: 100%;">
                                 <tr class="header-bg">
@@ -347,7 +352,7 @@ if uploaded_file is not None:
                             </table>
                         </td>
 
-                        <!-- BRUTTOGEWICHT & UNTERSCHRIFT MA (40% BREITE) -->
+                        <!-- BRUTTOGEWICHT & UNTERSCHRIFT MA -->
                         <td style="width: 40%; vertical-align: top; padding: 0px;">
                             <table style="width: 100%; height: 100%;">
                                 <tr>
