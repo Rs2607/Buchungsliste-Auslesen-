@@ -213,7 +213,7 @@ if uploaded_file is not None:
             for a in awb_list:
                 awb_rows += f"""
                 <tr style="height: 23px;">
-                    <td style="width: 58%; font-size: 16pt; font-weight: bold; padding-left: 4px;">{a['awb']}</td>
+                    <td style="width: 58%; font-size: 35pt; font-weight: bold; padding-left: 4px;">{a['awb']}</td>
                     <td class="center" style="width: 17%; font-size: 10pt; font-weight: bold;">{a['pcs']}</td>
                     <td class="center" style="width: 25%; font-size: 8.5pt;">{a['special']}</td>
                 </tr>
