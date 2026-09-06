@@ -1,6 +1,5 @@
 import io
 import json
-import re
 import time
 import streamlit as st
 from PIL import Image
@@ -14,7 +13,6 @@ st.set_page_config(page_title="ULD Statement Generator AI", page_icon="📦", la
 st.title("📦 ULD Statement Generator (AI)")
 st.write("Foto der Buchungsliste hochladen – Gemini liest die ULDs und AWBs automatisch aus.")
 
-# API Key check from Streamlit Secrets
 if "GEMINI_API_KEY" in st.secrets:
     client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
 else:
@@ -27,14 +25,9 @@ def analyze_booking_list_with_ai(image_bytes):
     
     prompt = """
     Du bist ein Experte für Air Cargo Handling am Flughafen (ULD Processing).
-    Analysiere das Bild dieser Buchungsliste / Cargo Manifest genau.
+    Analysiere das Bild dieser Buchungsliste / Cargo Manifest.
 
-    DYNAMISCHE KONSOLIDIERUNG & DEDUPLIZIERUNG:
-    - Auf Buchungslisten werden ULD-Nummern oft mehrfach genannt (z.B. wenn 4 verschiedene AWBs auf dieselbe PMC-Nummer geladen sind).
-    - Konsolidiere IMMER nach der eindeutigen ULD-Nummer! Erstelle für jede ULD-Nummer (z.B. PMC12345R7) genau EIN Objekt im Array "ulds".
-    - Fasse ALLE AWBs, die zu dieser einen ULD-Nummer gehören, in das "awbs"-Array dieses ULDs zusammen.
-    - Wenn eine Buchungsliste 40 Zeilen hat, aber nur 20 eindeutige ULD-Nummern existieren, erstelle genau 20 ULD-Einträge mit ihren jeweiligen AWBs.
-    - Ignoriere Hinweistexte wie "ULD STACKS: ...", "TOTAL" oder reine Summenzeilen.
+    Lies jede Zeile der Tabelle aus und ordne die AWB-Nummern den jeweiligen ULDs zu.
 
     Extrahiere alle Daten und antworte STRENG im folgenden JSON-Format (kein Fließtext, kein Markdown-Codeblock):
     {
@@ -47,11 +40,6 @@ def analyze_booking_list_with_ai(image_bytes):
             {
               "awb": "180-63061655",
               "pcs": "10",
-              "special": "EAW,ECC,ELM,GCP"
-            },
-            {
-              "awb": "180-63059150",
-              "pcs": "191",
               "special": "EAW,ECC,GCP"
             }
           ]
@@ -60,14 +48,12 @@ def analyze_booking_list_with_ai(image_bytes):
     }
 
     Regeln:
-    1. Identifiziere echte ULDs (z. B. PMC..., PLA..., AKE..., AKH...) eindeutig.
-    2. Konsolidiere doppelte ULD-Nummern: Füge alle zugehörigen AWBs in das 'awbs'-Array derselben ULD-ID ein.
-    3. Bereinige Konturbezeichnungen (z. B. aus "SCA/P2/K2205" wird "SCA", aus "PWG/P137/K1730" wird "PWG", aus "SCB/P183/K2785" wird "SCB").
-    4. Gib ausschließlich valides JSON zurück.
+    1. Erfasse jeden AWB und die zugehörige ULD-Nummer.
+    2. Bereinige Konturbezeichnungen (z. B. aus "SCA/P2/K2205" wird "SCA").
+    3. Gib ausschließlich valides JSON zurück.
     """
     
     models_to_try = ["gemini-3.5-flash-lite", "gemini-3.6-flash"]
-    
     response = None
     last_exception = None
 
@@ -105,7 +91,32 @@ def analyze_booking_list_with_ai(image_bytes):
         
     return json.loads(raw_text)
 
-# File Uploader Widget
+def consolidate_ulds(raw_ulds):
+    """Führt doppelte ULD-Nummern garantiert in Python zusammen."""
+    consolidated = {}
+    for item in raw_ulds:
+        uld_id = str(item.get("uld_id") or "-").strip()
+        contour = str(item.get("contour") or "-").strip()
+        weight = str(item.get("weight") or "0").strip()
+        awb_list = item.get("awbs") if isinstance(item.get("awbs"), list) else []
+
+        if uld_id not in consolidated:
+            consolidated[uld_id] = {
+                "uld_id": uld_id,
+                "contour": contour,
+                "weight": weight,
+                "awbs": []
+            }
+        
+        for a in awb_list:
+            if isinstance(a, dict):
+                consolidated[uld_id]["awbs"].append({
+                    "awb": str(a.get('awb') or '').strip(),
+                    "pcs": str(a.get('pcs') or '1').strip(),
+                    "special": str(a.get('special') or '-').strip()
+                })
+    return list(consolidated.values())
+
 uploaded_file = st.file_uploader(
     "Foto der Buchungsliste hochladen", 
     type=["jpg", "jpeg", "png"],
@@ -120,9 +131,10 @@ if uploaded_file is not None:
 
     with st.spinner("Gemini liest und konsolidiert die ULDs..."):
         try:
-            data = analyze_booking_list_with_ai(input_bytes)
-            ulds = data.get("ulds", [])
-            st.success(f"Analyse erfolgreich! Gefundene eindeutige ULDs: {len(ulds)}")
+            raw_data = analyze_booking_list_with_ai(input_bytes)
+            raw_ulds = raw_data.get("ulds", [])
+            ulds = consolidate_ulds(raw_ulds)
+            st.success(f"Analyse erfolgreich! Eindeutige ULDs: {len(ulds)}")
         except Exception as e:
             st.error(f"Fehler bei der KI-Analyse: {e}")
             st.stop()
@@ -130,80 +142,120 @@ if uploaded_file is not None:
     if ulds:
         css_style = """
         <style>
-            @page { size: A4 portrait; margin: 4mm 5mm; }
-            body { font-family: Arial, sans-serif; font-size: 10pt; color: #000; }
-            .container { width: 100%; page-break-after: always; }
-            table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-            th, td { border: 1px solid #000; padding: 3px 5px; vertical-align: middle; }
-            .title-area { font-size: 20pt; font-weight: bold; }
-            .center { text-align: center; }
+            @page {
+                size: A4 portrait;
+                margin: 8mm;
+            }
+            body {
+                font-family: Helvetica, Arial, sans-serif;
+                font-size: 10pt;
+                color: #000000;
+            }
+            .page-container {
+                page-break-after: always;
+            }
+            table {
+                width: 100%;
+                border-collapse: collapse;
+                margin-bottom: 8px;
+            }
+            th, td {
+                border: 1px solid #000000;
+                padding: 5px;
+                vertical-align: middle;
+            }
+            th {
+                background-color: #e0e0e0;
+                font-weight: bold;
+                text-align: center;
+            }
+            .header-table td {
+                border: 1px solid #000000;
+                padding: 8px;
+            }
+            .title {
+                font-size: 18pt;
+                font-weight: bold;
+            }
+            .airport {
+                font-size: 16pt;
+                font-weight: bold;
+                text-align: right;
+            }
+            .center {
+                text-align: center;
+            }
         </style>
         """
 
         html_pages = []
         for item in ulds:
-            # Sicheres String-Casting & Null-Werte abfangen
-            uld_id = str(item.get("uld_id") or "-")
-            contour = str(item.get("contour") or "-")
-            weight = str(item.get("weight") or "0")
-            awb_list = item.get("awbs") if isinstance(item.get("awbs"), list) else []
+            uld_id = item["uld_id"]
+            contour = item["contour"]
+            weight = item["weight"]
+            awb_list = item["awbs"]
 
             awb_rows = ""
-            valid_awb_count = 0
             for a in awb_list:
-                if isinstance(a, dict):
-                    awb_val = str(a.get('awb') or '')
-                    pcs_val = str(a.get('pcs') or '1')
-                    special_val = str(a.get('special') or '-')
-                    
-                    awb_rows += f"""
-                    <tr>
-                        <td style="height: 18px; font-size: 9pt;">{awb_val}</td>
-                        <td class="center" style="font-size: 9pt;">{pcs_val}</td>
-                        <td class="center" style="font-size: 8pt;">{special_val}</td>
-                    </tr>
-                    """
-                    valid_awb_count += 1
-
-            # Auffüllen leerer Zeilen für ein sauberes A4-Formular (30 Zeilen pro ULD-Statement)
-            for _ in range(max(0, 30 - valid_awb_count)):
-                awb_rows += '<tr><td style="height: 18px;">&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr>'
+                awb_rows += f"""
+                <tr>
+                    <td style="width: 50%; font-size: 10pt;">{a['awb']}</td>
+                    <td class="center" style="width: 15%; font-size: 10pt;">{a['pcs']}</td>
+                    <td class="center" style="width: 35%; font-size: 9pt;">{a['special']}</td>
+                </tr>
+                """
+            
+            # Auffüllen leerer Tabellenzeilen für saubere Optik
+            empty_rows_needed = max(0, 18 - len(awb_list))
+            for _ in range(empty_rows_needed):
+                awb_rows += """
+                <tr>
+                    <td style="height: 20px;"></td>
+                    <td></td>
+                    <td></td>
+                </tr>
+                """
 
             page_html = f"""
-            <div class="container">
-                <table style="margin-bottom: 3px;">
+            <div class="page-container">
+                <table class="header-table">
                     <tr>
-                        <td style="width: 58%; padding: 6px;">
-                            <span class="title-area">ULD - Statement</span> <b>Cargo - Handling</b>
+                        <td style="width: 65%;">
+                            <span class="title">ULD - Statement</span><br>
+                            <span style="font-size: 10pt;">Cargo - Handling</span>
                         </td>
-                        <td style="width: 42%; text-align: right; font-size: 18pt; font-weight: bold;">
-                            VIE <span style="font-size: 9pt; display: block;">Vienna Airport</span>
+                        <td style="width: 35%;" class="airport">
+                            VIE<br>
+                            <span style="font-size: 8pt; font-weight: normal;">Vienna Airport</span>
                         </td>
                     </tr>
                 </table>
-                <table style="margin-bottom: 3px;">
+
+                <table>
                     <tr>
-                        <td style="padding: 6px;">
+                        <td style="padding: 8px; font-size: 12pt;">
                             <b>ULD - Number:</b> {uld_id}
                         </td>
                     </tr>
                 </table>
-                <table style="margin-bottom: 3px;">
+
+                <table>
                     <thead>
-                        <tr style="background-color: #f0f0f0;">
-                            <th>Air Waybill</th>
-                            <th style="width: 60px;">Pcs</th>
-                            <th style="width: 90px;">Special-Cargo</th>
+                        <tr>
+                            <th style="width: 50%;">Air Waybill</th>
+                            <th style="width: 15%;">Pcs</th>
+                            <th style="width: 35%;">Special-Cargo</th>
                         </tr>
                     </thead>
                     <tbody>
                         {awb_rows}
                     </tbody>
                 </table>
+
                 <table>
                     <tr>
-                        <td><b>KONTUR:</b> {contour}</td>
-                        <td><b>Bruttogewicht:</b> {weight} kg</td>
+                        <td style="width: 50%; padding: 8px;"><b>KONTUR:</b> {contour}</td>
+                        <td style="width: 50%; padding: 8px;"><b>Bruttogewicht:</b> {weight} kg</td>
                     </tr>
                 </table>
             </div>
@@ -226,6 +278,6 @@ if uploaded_file is not None:
                     key="pdf_download_btn"
                 )
             else:
-                st.error("Fehler bei der PDF-Generierung (Layout-Fehler).")
+                st.error("Fehler beim Erstellen des PDFs (Layout-Problem).")
         except Exception as e:
             st.error(f"Fehler bei der Erstellung der PDF-Datei: {e}")
