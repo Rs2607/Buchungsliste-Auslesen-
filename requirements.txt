@@ -1,8 +1,4 @@
 streamlit
+pytesseract
 Pillow
 xhtml2pdf
-google-generativeai
-pytesseract
-easyocr
-torch
-opencv-python-headless
