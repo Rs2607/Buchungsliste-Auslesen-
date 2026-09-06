@@ -4,7 +4,7 @@ from collections import defaultdict
 import streamlit as st
 from PIL import Image
 import pytesseract
-from weasyprint import HTML
+from xhtml2pdf import pisa
 
 # Konfiguration der Seite
 st.set_page_config(page_title="ULD Statement Generator", page_icon="📦", layout="centered")
@@ -12,7 +12,7 @@ st.set_page_config(page_title="ULD Statement Generator", page_icon="📦", layou
 st.title("📦 ULD Statement Generator")
 st.write("Lade ein Foto der Buchungsliste hoch, um automatisch PDF-Statements zu generieren.")
 
-# 1. Foto-Upload / Kamera-Input mit festem Key
+# 1. Foto-Upload / Kamera-Input
 uploaded_file = st.file_uploader(
     "Foto der Buchungsliste hochladen", 
     type=["jpg", "jpeg", "png"],
@@ -22,9 +22,14 @@ uploaded_file = st.file_uploader(
 if uploaded_file is not None:
     # Bild laden
     image = Image.open(uploaded_file)
-    st.image(image, caption="Hochgeladene Buchungsliste", use_column_width=True)
+    
+    # Bild auf max. 2000px verkleinern, um RAM-Overhead bei großen Fotos (z.B. 17 MB) zu vermeiden
+    image.thumbnail((2000, 2000))
 
-    # OCR ausführen
+    # Bild im UI anzeigen
+    st.image(image, caption="Hochgeladene Buchungsliste", use_container_width=True)
+
+    # Texterkennung (OCR)
     with st.spinner("Lese Text aus dem Foto (OCR)..."):
         extracted_text = pytesseract.image_to_string(image)
 
@@ -36,7 +41,7 @@ if uploaded_file is not None:
         key="ocr_text_area"
     )
 
-    # RegEx-Muster für ULDs und AWBs
+    # RegEx-Muster für ULDs (IATA-Standard) und AWBs
     uld_pattern = re.compile(r'\b([A-Z]{3}\d{5}[A-Z0-9]{2})\b')
     awb_pattern = re.compile(r'\b(\d{3}[\s-]?\d{8})\b')
 
@@ -66,7 +71,7 @@ if uploaded_file is not None:
     if ulds:
         st.success(f"Gefundene ULDs: {len(ulds)}")
         
-        # HTML/CSS Styling
+        # HTML/CSS Layout
         css_style = """
         <style>
             @page { size: A4 portrait; margin: 4mm 5mm; }
@@ -136,10 +141,12 @@ if uploaded_file is not None:
 
         full_html = f"<!DOCTYPE html><html><head><meta charset='UTF-8'>{css_style}</head><body>{''.join(html_pages)}</body></html>"
 
-        # PDF erzeugen
-        pdf_bytes = HTML(string=full_html).write_pdf()
+        # PDF per xhtml2pdf erzeugen (ohne Linux-C-Abhängigkeiten)
+        pdf_buffer = io.BytesIO()
+        pisa.CreatePDF(full_html, dest=pdf_buffer)
+        pdf_bytes = pdf_buffer.getvalue()
 
-        # Download-Button mit festem Key
+        # Download-Button
         st.download_button(
             label="📄 Fertiges ULD-Statement PDF herunterladen",
             data=pdf_bytes,
