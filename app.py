@@ -24,16 +24,18 @@ def analyze_booking_list_with_ai(image_bytes):
     img.thumbnail((1600, 1600))
     
     prompt = """
-    Du bist ein Experte für Air Cargo Handling am Flughafen (ULD Processing).
+    Du bist ein Experte für Air Cargo Handling am Flughafen Wien (ULD Processing).
     Analysiere das Bild dieser Buchungsliste / Cargo Manifest extrem genau.
 
-    ANWEISUNG ZUR DOKUMENTEN-EXTRAKTION:
-    - Scanne in der Spalte "Flugdetails & Aufbau" JEDE EINZELNE ZEILE auf ULD-Nummern (z.B. PMC80397R7, PMC58968R7, PMC17665R9, PMC70204R7, PMC01424R7, PMC60998R7).
-    - Oft stehen in EINER Tabellenzeile der Buchungsliste zwei ULDs untereinander. Du musst BEIDE ULDs erfassen!
-    - Verknüpfe jede gefundene ULD-Nummer mit der AWB-Nummer der jeweiligen Tabellenzeile.
+    ANWEISUNG ZUR EXTRAKTION:
+    - Scanne die Buchungsliste nach Flugnummer (z.B. KE538), Destination (z.B. MXP) und allen ULDs.
+    - Scanne in der Spalte "Flugdetails & Aufbau" JEDE EINZELNE ZEILE auf ULD-Nummern (z.B. PMC80397R7, PMC58968R7, PMC17665R9, PMC70204R7).
+    - Verknüpfe jede ULD-Nummer mit der AWB-Nummer, Stückzahl, Gewicht und Special-Cargo-Codes.
 
     Extrahiere alle Daten und antworte STRENG im folgenden JSON-Format (kein Fließtext, kein Markdown-Codeblock):
     {
+      "flight": "KE538",
+      "dest": "MXP",
       "raw_records": [
         {
           "uld_id": "PMC80397R7",
@@ -41,13 +43,13 @@ def analyze_booking_list_with_ai(image_bytes):
           "pcs": "6",
           "weight": "2639",
           "contour": "SCA",
-          "special": "EAW,ECC"
+          "special": "EAW, ECC"
         }
       ]
     }
 
     Regeln:
-    1. Bereinige Konturbezeichnungen (z.B. aus "SCA/P6/K3535" wird "SCA", aus "PWG/P137/K1730" wird "PWG").
+    1. Bereinige Konturbezeichnungen (z.B. aus "SCA/P6/K3535" wird "SCA").
     2. Ignoriere Hinweistexte wie "ULD STACKS: ...".
     3. Gib ausschließlich valides JSON zurück.
     """
@@ -134,12 +136,14 @@ if uploaded_file is not None:
     
     st.image(image, caption="Hochgeladene Buchungsliste", use_container_width=True)
 
-    with st.spinner("Gemini liest und konsolidiert die ULDs..."):
+    with st.spinner("Gemini liest die Daten aus..."):
         try:
             raw_data = analyze_booking_list_with_ai(input_bytes)
+            flight_no = raw_data.get("flight", "-")
+            dest_code = raw_data.get("dest", "-")
             raw_records = raw_data.get("raw_records", [])
             ulds = consolidate_ulds(raw_records)
-            st.success(f"Analyse erfolgreich! Eindeutige ULDs: {len(ulds)}")
+            st.success(f"Analyse erfolgreich! Gefundene ULDs: {len(ulds)}")
         except Exception as e:
             st.error(f"Fehler bei der KI-Analyse: {e}")
             st.stop()
@@ -149,11 +153,11 @@ if uploaded_file is not None:
         <style>
             @page {
                 size: A4 portrait;
-                margin: 6mm;
+                margin: 5mm;
             }
             body {
                 font-family: Helvetica, Arial, sans-serif;
-                font-size: 9pt;
+                font-size: 8pt;
                 color: #000000;
             }
             .page-container {
@@ -162,33 +166,27 @@ if uploaded_file is not None:
             table {
                 width: 100%;
                 border-collapse: collapse;
-                margin-bottom: 6px;
+                margin-bottom: 3px;
             }
-            th, td {
+            td, th {
                 border: 1px solid #000000;
-                padding: 4px;
+                padding: 2px 4px;
                 vertical-align: middle;
             }
             th {
-                background-color: #e0e0e0;
+                background-color: #f0f0f0;
+                font-size: 8pt;
                 font-weight: bold;
                 text-align: center;
             }
-            .title-box {
-                font-size: 16pt;
-                font-weight: bold;
-            }
-            .airport-box {
-                font-size: 14pt;
-                font-weight: bold;
-                text-align: right;
-            }
-            .center {
-                text-align: center;
-            }
-            .data-row {
-                height: 18px;
-            }
+            .center { text-align: center; }
+            .right { text-align: right; }
+            .bold { font-weight: bold; }
+            .header-title { font-size: 14pt; font-weight: bold; }
+            .header-vie { font-size: 16pt; font-weight: bold; text-align: right; }
+            .small-text { font-size: 6.5pt; }
+            .row-awb { height: 16px; font-size: 8.5pt; }
+            .check-box { width: 12px; height: 12px; border: 1px solid #000; display: inline-block; }
         </style>
         """
 
@@ -202,18 +200,18 @@ if uploaded_file is not None:
             awb_rows = ""
             for a in awb_list:
                 awb_rows += f"""
-                <tr class="data-row">
-                    <td style="width: 50%; font-size: 9.5pt;">{a['awb']}</td>
-                    <td class="center" style="width: 15%; font-size: 9.5pt;">{a['pcs']}</td>
-                    <td class="center" style="width: 35%; font-size: 8.5pt;">{a['special']}</td>
+                <tr class="row-awb">
+                    <td style="width: 50%;">{a['awb']}</td>
+                    <td class="center" style="width: 15%;">{a['pcs']}</td>
+                    <td class="center" style="width: 35%;">{a['special']}</td>
                 </tr>
                 """
             
-            # Exakt 15 Datenzeilen insgesamt pro Seite, damit nichts auf Seite 2 rutscht
-            empty_rows_needed = max(0, 15 - len(awb_list))
-            for _ in range(empty_rows_needed):
+            # Formular auffüllen (insgesamt 8 AWB-Zeilen)
+            empty_rows = max(0, 8 - len(awb_list))
+            for _ in range(empty_rows):
                 awb_rows += """
-                <tr class="data-row">
+                <tr class="row-awb">
                     <td>&nbsp;</td>
                     <td>&nbsp;</td>
                     <td>&nbsp;</td>
@@ -222,33 +220,37 @@ if uploaded_file is not None:
 
             page_html = f"""
             <div class="page-container">
+                <!-- HEADER TABLE -->
                 <table>
                     <tr>
-                        <td style="width: 65%; padding: 6px;">
-                            <span class="title-box">ULD - Statement</span><br>
-                            <span style="font-size: 9pt;">Cargo - Handling</span>
+                        <td style="width: 65%; border: 1px solid #000;">
+                            <span class="header-title">ULD - Statement</span> <b>Cargo - Handling</b><br>
+                            <b>Flug:</b> {flight_no} &nbsp;&nbsp;&nbsp;&nbsp; <b>Dest.:</b> {dest_code}
                         </td>
-                        <td style="width: 35%; padding: 6px;" class="airport-box">
+                        <td style="width: 35%; border: 1px solid #000;" class="header-vie">
                             VIE<br>
                             <span style="font-size: 8pt; font-weight: normal;">Vienna Airport</span>
                         </td>
                     </tr>
                 </table>
 
+                <!-- ULD NUMBER -->
                 <table>
                     <tr>
-                        <td style="padding: 6px; font-size: 11pt;">
-                            <b>ULD - Number:</b> {uld_id}
+                        <td style="padding: 4px;">
+                            <b>ULD - Number</b><br>
+                            <span style="font-size: 11pt; font-weight: bold;">Paletten / Container: {uld_id}</span>
                         </td>
                     </tr>
                 </table>
 
+                <!-- AWB TABLE -->
                 <table>
                     <thead>
                         <tr>
                             <th style="width: 50%;">Air Waybill</th>
-                            <th style="width: 15%;">Pcs</th>
-                            <th style="width: 35%;">Special-Cargo</th>
+                            <th style="width: 15%;">Pcs<br><span class="small-text">Stück</span></th>
+                            <th style="width: 35%;">Special-<br>Cargo</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -256,12 +258,98 @@ if uploaded_file is not None:
                     </tbody>
                 </table>
 
+                <!-- KONTUR & MATERIALIEN -->
                 <table>
                     <tr>
-                        <td style="width: 50%; padding: 6px;"><b>KONTUR:</b> {contour}</td>
-                        <td style="width: 50%; padding: 6px;"><b>Bruttogewicht:</b> {weight} kg</td>
+                        <td colspan="4"><b>KONTUR:</b> {contour}</td>
+                    </tr>
+                    <tr>
+                        <td style="width: 25%;">Stricke:</td>
+                        <td style="width: 25%;">Gurten:</td>
+                        <td style="width: 25%;">EURO - Pal.:</td>
+                        <td style="width: 25%;">Verzurrösen:</td>
+                    </tr>
+                    <tr>
+                        <td>Bretter 1,30m:</td>
+                        <td>Bretter 2,00m:</td>
+                        <td>Bretter 2,20m:</td>
+                        <td>Bretter 2,90m:</td>
                     </tr>
                 </table>
+
+                <!-- CHECKBOXES DAMAGE / HEIGHT -->
+                <table>
+                    <tr>
+                        <td style="width: 50%;">
+                            <b>ULD CHECKED FOR DAMAGES</b><br>
+                            <span class="small-text">Check and ensure airworthiness of BUP/TRU</span><br>
+                            OK <span class="check-box"></span> &nbsp;&nbsp;&nbsp;&nbsp; NOT OK <span class="check-box"></span>
+                        </td>
+                        <td style="width: 50%;">
+                            <b>HEIGHT CHECK PERFORMED</b><br><br>
+                            OK <span class="check-box"></span> &nbsp;&nbsp;&nbsp;&nbsp; NOT OK <span class="check-box"></span>
+                        </td>
+                    </tr>
+                </table>
+
+                <!-- LAGERPLATZ GRID -->
+                <table>
+                    <tr>
+                        <td rowspan="2" style="width: 20%; font-weight: bold;">Lagerplatz</td>
+                        <td style="width: 20%;">Perisha 1</td>
+                        <td style="width: 15%;">2</td>
+                        <td style="width: 15%;">3</td>
+                        <td style="width: 15%;">4</td>
+                        <td style="width: 15%;">5</td>
+                    </tr>
+                    <tr>
+                        <td>fache Seite</td>
+                        <td>&nbsp;</td>
+                        <td>&nbsp;</td>
+                        <td>&nbsp;</td>
+                        <td>&nbsp;</td>
+                    </tr>
+                    <tr>
+                        <td colspan="3">Fremdhandling Vorhaltefläche</td>
+                        <td colspan="3">Stückgut Vorhaltefläche</td>
+                    </tr>
+                    <tr>
+                        <td colspan="3">LCAG Vorhaltefläche</td>
+                        <td colspan="3">Stückgut Warehouse</td>
+                    </tr>
+                    <tr>
+                        <td colspan="3">LCAG Warehouse</td>
+                        <td colspan="3">Trucking Vorhaltefläche</td>
+                    </tr>
+                    <tr>
+                        <td colspan="3">Breakdown</td>
+                        <td colspan="3">Disponent Büro</td>
+                    </tr>
+                    <tr>
+                        <td colspan="6">Sonstiger Lagerplatz:</td>
+                    </tr>
+                </table>
+
+                <!-- FOOTER GEWICHT & UNTERSCHRIFTEN -->
+                <table>
+                    <tr>
+                        <td colspan="2" style="font-size: 10pt; font-weight: bold; padding: 4px;">
+                            Grossweight / Bruttogewicht: {weight} kg
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="width: 50%; padding: 4px;">
+                            Name / PersNr.:<br><br>
+                            <b>Unterschrift DG:</b>
+                        </td>
+                        <td style="width: 50%; padding: 4px;">
+                            Name / PersNr.:<br><br>
+                            <b>Unterschrift MA:</b>
+                        </td>
+                    </tr>
+                </table>
+                
+                <div class="small-text right" style="margin-top: 2px;">Form 752z/25 vie</div>
             </div>
             """
             html_pages.append(page_html)
