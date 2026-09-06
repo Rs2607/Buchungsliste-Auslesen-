@@ -1,4 +1,4 @@
 streamlit
 pytesseract
 Pillow
-weasyprint
+xhtml2pdf
