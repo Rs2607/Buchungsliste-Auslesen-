@@ -1,8 +1,2 @@
 tesseract-ocr
 tesseract-ocr-deu
-libpango-1.0-0
-harfbuzz-utils
-fontconfig
-libpangoft2-1.0-0
-libgdk-pixbuf-2.0-0
-libffi-dev
