@@ -1,158 +1,87 @@
 import io
+import json
 import re
 from collections import defaultdict
 import streamlit as st
 from PIL import Image
 import pytesseract
+import easyocr
+import numpy as np
+import google.generativeai as genai
 from xhtml2pdf import pisa
 
 # Konfiguration der Seite
 st.set_page_config(page_title="ULD Statement Generator", page_icon="📦", layout="centered")
 
-st.title("📦 ULD Statement Generator")
-st.write("Lade ein Foto der Buchungsliste hoch, um automatisch PDF-Statements zu generieren.")
+st.title("📦 Multi-Engine ULD Statement Generator")
+st.write("Verarbeitet Buchungslisten mit Tesseract, EasyOCR & Gemini KI für maximale Erkennungsgenauigkeit.")
 
-# 1. Foto-Upload / Kamera-Input
-uploaded_file = st.file_uploader(
-    "Foto der Buchungsliste hochladen", 
-    type=["jpg", "jpeg", "png"],
-    key="uploader_input"
-)
+# Sidebar für Einstellungen & API-Key
+st.sidebar.header("Einstellungen")
+api_key = st.sidebar.text_input("Gemini API Key (Empfohlen)", type="password", help="Trage hier deinen API-Key ein.")
+use_easyocr = st.sidebar.checkbox("EasyOCR aktivieren", value=True)
+use_tesseract = st.sidebar.checkbox("Tesseract OCR aktivieren", value=True)
+
+@st.cache_resource
+def load_easyocr_reader():
+    return easyocr.Reader(['en', 'de'], gpu=False)
+
+uploaded_file = st.file_uploader("Foto der Buchungsliste hochladen", type=["jpg", "jpeg", "png"], key="uploader_input")
 
 if uploaded_file is not None:
-    # Bild laden
     image = Image.open(uploaded_file)
-    
-    # Bild auf max. 2000px verkleinern, um RAM-Overhead bei großen Fotos (z.B. 17 MB) zu vermeiden
+    # Bild verkleinern, um RAM-Grenzwerte bei großen Smartphone-Fotos zu wahren
     image.thumbnail((2000, 2000))
-
-    # Bild im UI anzeigen
     st.image(image, caption="Hochgeladene Buchungsliste", use_container_width=True)
 
-    # Texterkennung (OCR)
-    with st.spinner("Lese Text aus dem Foto (OCR)..."):
-        extracted_text = pytesseract.image_to_string(image)
+    combined_ocr_text = ""
 
-    # Textfeld zur Kontrolle / Korrektur
-    text_input = st.text_area(
-        "Erkannter Text (hier bei Bedarf korrigieren):", 
-        value=extracted_text, 
-        height=180,
-        key="ocr_text_area"
-    )
+    with st.spinner("Lese Text mit ausgewählten OCR-Engines aus..."):
+        # 1. Tesseract OCR
+        tesseract_text = ""
+        if use_tesseract:
+            try:
+                tesseract_text = pytesseract.image_to_string(image, config='--oem 3 --psm 6')
+            except Exception as e:
+                tesseract_text = f"Tesseract Fehler: {e}"
 
-    # RegEx-Muster für ULDs (IATA-Standard) und AWBs
-    uld_pattern = re.compile(r'\b([A-Z]{3}\d{5}[A-Z0-9]{2})\b')
-    awb_pattern = re.compile(r'\b(\d{3}[\s-]?\d{8})\b')
+        # 2. EasyOCR
+        easyocr_text = ""
+        if use_easyocr:
+            try:
+                reader = load_easyocr_reader()
+                img_np = np.array(image)
+                results = reader.readtext(img_np, detail=0)
+                easyocr_text = "\n".join(results)
+            except Exception as e:
+                easyocr_text = f"EasyOCR Fehler: {e}"
 
-    ulds = defaultdict(lambda: {'awbs': [], 'weight': '0', 'contour': '-'})
+        combined_ocr_text = f"--- TESSERACT OCR ---\n{tesseract_text}\n\n--- EASYOCR ---\n{easyocr_text}"
 
-    lines = text_input.split('\n')
-    current_uld = None
+    extracted_ulds = []
 
-    for line in lines:
-        line_clean = line.strip()
-        if not line_clean:
-            continue
+    # 3. KI-Auswertung (Gemini)
+    if api_key:
+        with st.spinner("KI vergleicht OCR-Ergebnisse und strukturiert die Daten..."):
+            try:
+                genai.configure(api_key=api_key)
+                model = genai.GenerativeModel('gemini-1.5-flash')
 
-        uld_match = uld_pattern.search(line_clean)
-        if uld_match:
-            current_uld = uld_match.group(1)
+                prompt = f"""
+                Du bist ein Experte für Luftfracht. Vor dir liegt ein Foto einer Buchungsliste sowie der extrahierte Text zweier OCR-Engines.
+                
+                Extrahierter OCR-Text:
+                {combined_ocr_text}
 
-        awb_match = awb_pattern.search(line_clean)
-        if awb_match and current_uld:
-            awb_no = awb_match.group(1)
-            ulds[current_uld]['awbs'].append({
-                'awb': awb_no,
-                'pcs': '1',
-                'special': '-'
-            })
-
-    if ulds:
-        st.success(f"Gefundene ULDs: {len(ulds)}")
-        
-        # HTML/CSS Layout
-        css_style = """
-        <style>
-            @page { size: A4 portrait; margin: 4mm 5mm; }
-            body { font-family: Arial, sans-serif; font-size: 10pt; color: #000; }
-            .container { width: 100%; height: 100%; page-break-after: always; }
-            table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-            th, td { border: 1px solid #000; padding: 4px 6px; vertical-align: middle; }
-            .title-area { font-size: 22pt; font-weight: bold; }
-            .center { text-align: center; }
-        </style>
-        """
-
-        html_pages = []
-        for uld_id, item in ulds.items():
-            awb_rows = ""
-            for a in item['awbs']:
-                awb_rows += f"""
-                <tr>
-                    <td style="height: 18.5px; font-size: 9pt;">{a['awb']}</td>
-                    <td class="center" style="font-size: 9pt;">{a['pcs']}</td>
-                    <td class="center" style="font-size: 8pt;">{a['special']}</td>
-                </tr>
+                Aufgabe:
+                Analysiere das Foto und den OCR-Text. Extrahiere alle ULD-Nummern (PMC, PLA, AKE etc.), Air Waybills (AWBs), Stückzahlen und Gewichte.
+                Füge gleiche ULD-Nummern zusammen. Die Konturen bestehen meist nur aus 2-3 Buchstaben (z.B. SCA, LD6, LDP, LDG) - lasse Zusatzbezeichnungen wie -T(2) weg.
+                
+                Gib NUR ein gültiges JSON-Array zurück (ohne Markdown-Backticks):
+                [
+                    {{"uld": "PMC01886R7", "awb": "180-54666065", "pcs": "1", "weight": "1580", "contour": "SCA"}}
+                ]
                 """
-            for _ in range(max(0, 32 - len(item['awbs']))):
-                awb_rows += '<tr><td style="height: 18.5px;"></td><td></td><td></td></tr>'
 
-            page_html = f"""
-            <div class="container">
-                <table style="margin-bottom: 3px;">
-                    <tr>
-                        <td style="width: 58%; padding: 7px;">
-                            <span class="title-area">ULD - Statement</span> <b>Cargo - Handling</b>
-                        </td>
-                        <td style="width: 42%; text-align: right; font-size: 20pt; font-weight: bold;">
-                            VIE <span style="font-size: 9pt; display: block;">Vienna Airport</span>
-                        </td>
-                    </tr>
-                </table>
-                <table style="margin-bottom: 3px;">
-                    <tr>
-                        <td style="padding: 7px;">
-                            <b>ULD - Number:</b> {uld_id}
-                        </td>
-                    </tr>
-                </table>
-                <table style="margin-bottom: 3px;">
-                    <thead>
-                        <tr style="background-color: #f0f0f0;">
-                            <th>Air Waybill</th>
-                            <th style="width: 60px;">Pcs</th>
-                            <th style="width: 90px;">Special-Cargo</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {awb_rows}
-                    </tbody>
-                </table>
-                <table>
-                    <tr>
-                        <td><b>KONTUR:</b> {item['contour']}</td>
-                        <td><b>Bruttogewicht:</b> {item['weight']} kg</td>
-                    </tr>
-                </table>
-            </div>
-            """
-            html_pages.append(page_html)
-
-        full_html = f"<!DOCTYPE html><html><head><meta charset='UTF-8'>{css_style}</head><body>{''.join(html_pages)}</body></html>"
-
-        # PDF per xhtml2pdf erzeugen (ohne Linux-C-Abhängigkeiten)
-        pdf_buffer = io.BytesIO()
-        pisa.CreatePDF(full_html, dest=pdf_buffer)
-        pdf_bytes = pdf_buffer.getvalue()
-
-        # Download-Button
-        st.download_button(
-            label="📄 Fertiges ULD-Statement PDF herunterladen",
-            data=pdf_bytes,
-            file_name="ULD_Statements_Export.pdf",
-            mime="application/pdf",
-            key="pdf_download_btn"
-        )
-    else:
-        st.warning("Keine gültigen ULD-Nummern oder AWBs im Bild erkannt. Bitte passe den Text im Feld oben manuell an.")
+                response = model.generate_content([prompt, image])
+                clean_json_str = response.text.replace("```json", "").replace("
