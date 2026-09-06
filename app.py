@@ -126,6 +126,11 @@ def consolidate_ulds(raw_records):
         pcs = str(item.get("pcs") or "1").strip()
         special = str(item.get("special") or "-").strip()
 
+        # Säubern von doppelten Kommas / Leerzeichen in den Special-Codes
+        if special and special != "-":
+            codes = [c.strip() for c in special.replace('.', ',').split(',') if c.strip()]
+            special = ", ".join(codes)
+
         if uld_id not in consolidated:
             consolidated[uld_id] = {
                 "uld_id": uld_id,
@@ -191,7 +196,7 @@ if uploaded_file is not None:
             }
             td, th {
                 border: 1px solid #000000;
-                padding: 2px 4px;
+                padding: 2px 3px;
                 vertical-align: middle;
             }
             .center { text-align: center; }
@@ -213,9 +218,9 @@ if uploaded_file is not None:
             for a in awb_list:
                 awb_rows += f"""
                 <tr style="height: 23px;">
-                    <td style="width: 62%; font-size: 14pt; font-weight: bold; padding-left: 4px;">{a['awb']}</td>
-                    <td class="center" style="width: 15%; font-size: 10pt; font-weight: bold;">{a['pcs']}</td>
-                    <td class="center" style="width: 23%; font-size: 8.5pt;">{a['special']}</td>
+                    <td style="width: 55%; font-size: 12pt; font-weight: bold; padding-left: 4px;">{a['awb']}</td>
+                    <td class="center" style="width: 13%; font-size: 9.5pt; font-weight: bold;">{a['pcs']}</td>
+                    <td class="center" style="width: 32%; font-size: 7.5pt; word-wrap: break-word;">{a['special']}</td>
                 </tr>
                 """
             
@@ -270,9 +275,9 @@ if uploaded_file is not None:
                         <td style="width: 60%; vertical-align: top; padding: 0px; border: none;">
                             <table style="width: 100%;">
                                 <tr class="header-bg" style="height: 26px;">
-                                    <td style="width: 62%; font-size: 10pt;">Air Waybill</td>
-                                    <td style="width: 15%; font-size: 9pt;">Pcs<br><span class="small-text">Stück</span></td>
-                                    <td style="width: 23%; font-size: 9pt;">Special-<br>Cargo</td>
+                                    <td style="width: 55%; font-size: 9.5pt;">Air Waybill</td>
+                                    <td style="width: 13%; font-size: 8.5pt;">Pcs<br><span class="small-text">Stück</span></td>
+                                    <td style="width: 32%; font-size: 8.5pt;">Special-<br>Cargo</td>
                                 </tr>
                                 {awb_rows}
                             </table>
