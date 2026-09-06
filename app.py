@@ -1,9 +1,11 @@
 import io
 import json
 import re
+import time
 import streamlit as st
 from PIL import Image
 from google import genai
+from google.genai.errors import APIError
 from xhtml2pdf import pisa
 
 # Page Configuration
@@ -21,7 +23,6 @@ else:
 
 def analyze_booking_list_with_ai(image_bytes):
     img = Image.open(io.BytesIO(image_bytes))
-    # Skalierung auf max. 1600px für schnelle Übertragung und RAM-Schonung
     img.thumbnail((1600, 1600))
     
     prompt = """
@@ -53,14 +54,41 @@ def analyze_booking_list_with_ai(image_bytes):
     4. Gib ausschließlich valides JSON zurück.
     """
     
-    # Aufruf des Gemini 3.5 Flash Lite Modells
-    response = client.models.generate_content(
-        model="gemini-3.5-flash-lite",
-        contents=[img, prompt]
-    )
+    # Liste von Modellen für Fallback bei Überlastung (503)
+    models_to_try = ["gemini-2.0-flash-lite", "gemini-2.0-flash", "gemini-1.5-flash"]
     
+    response = None
+    last_exception = None
+
+    for model_name in models_to_try:
+        # Bis zu 2 Versuche pro Modell bei temporärer Überlastung
+        for attempt in range(2):
+            try:
+                response = client.models.generate_content(
+                    model=model_name,
+                    contents=[img, prompt]
+                )
+                if response and response.text:
+                    break
+            except APIError as e:
+                last_exception = e
+                # Bei 503 kurz warten und neu versuchen
+                if getattr(e, 'code', None) == 503 or "503" in str(e):
+                    time.sleep(1.5)
+                    continue
+                else:
+                    break
+            except Exception as e:
+                last_exception = e
+                break
+        
+        if response and response.text:
+            break
+
+    if not response or not response.text:
+        raise RuntimeError(f"Alle KI-Modelle derzeit überlastet. Bitte erneut versuchen. ({last_exception})")
+
     raw_text = response.text.strip()
-    # Entferne evtl. vorhandene Markdown-Tags
     if raw_text.startswith("```json"):
         raw_text = raw_text[7:-3].strip()
     elif raw_text.startswith("```"):
@@ -81,7 +109,7 @@ if uploaded_file is not None:
     
     st.image(image, caption="Hochgeladene Buchungsliste", use_container_width=True)
 
-    with st.spinner("Gemini Flash Lite liest die Daten aus..."):
+    with st.spinner("Gemini liest die Daten aus..."):
         try:
             data = analyze_booking_list_with_ai(input_bytes)
             ulds = data.get("ulds", [])
@@ -119,7 +147,6 @@ if uploaded_file is not None:
                     <td class="center" style="font-size: 8pt;">{a.get('special', '-')}</td>
                 </tr>
                 """
-            # Auffüllen leerer Zeilen für sauberes A4-Layout
             for _ in range(max(0, 32 - len(awb_list))):
                 awb_rows += '<tr><td style="height: 18.5px;"></td><td></td><td></td></tr>'
 
@@ -166,7 +193,6 @@ if uploaded_file is not None:
 
         full_html = f"<!DOCTYPE html><html><head><meta charset='UTF-8'>{css_style}</head><body>{''.join(html_pages)}</body></html>"
 
-        # PDF Generierung mit xhtml2pdf
         pdf_buffer = io.BytesIO()
         pisa.CreatePDF(full_html, dest=pdf_buffer)
         pdf_bytes = pdf_buffer.getvalue()
