@@ -12,31 +12,36 @@ st.set_page_config(page_title="ULD Statement Generator", page_icon="📦", layou
 st.title("📦 ULD Statement Generator")
 st.write("Lade ein Foto der Buchungsliste hoch, um automatisch PDF-Statements zu generieren.")
 
-# 1. Foto-Upload / Kamera-Input
-uploaded_file = st.file_uploader("Foto der Buchungsliste hochladen", type=["jpg", "jpeg", "png"])
+# 1. Foto-Upload / Kamera-Input mit festem Key
+uploaded_file = st.file_uploader(
+    "Foto der Buchungsliste hochladen", 
+    type=["jpg", "jpeg", "png"],
+    key="uploader_input"
+)
 
 if uploaded_file is not None:
-    # Bild anzeigen
+    # Bild laden
     image = Image.open(uploaded_file)
     st.image(image, caption="Hochgeladene Buchungsliste", use_column_width=True)
 
+    # OCR ausführen
     with st.spinner("Lese Text aus dem Foto (OCR)..."):
-        # Texterkennung per Tesseract-OCR
         extracted_text = pytesseract.image_to_string(image)
 
-    # Optional: Erkannten Text anzeigen zur Kontrolle
-    with st.expander("Erkannten Text anzeigen / bearbeiten"):
-        text_input = st.text_area("OCR-Ergebnis", value=extracted_text, height=150)
+    # Textfeld zur Kontrolle / Korrektur
+    text_input = st.text_area(
+        "Erkannter Text (hier bei Bedarf korrigieren):", 
+        value=extracted_text, 
+        height=180,
+        key="ocr_text_area"
+    )
 
-    # Parse-Logik für ULDs und AWBs
-    # Suchmuster für Standard-ULDs (PMC, PLA, AKE, AKH, etc.)
+    # RegEx-Muster für ULDs und AWBs
     uld_pattern = re.compile(r'\b([A-Z]{3}\d{5}[A-Z0-9]{2})\b')
     awb_pattern = re.compile(r'\b(\d{3}[\s-]?\d{8})\b')
 
-    # Struktur zur Speicherung: uld_dict[uld_id] = {'awbs': [], 'weight': '0', 'contour': 'SCA'}
     ulds = defaultdict(lambda: {'awbs': [], 'weight': '0', 'contour': '-'})
 
-    # Verarbeitung der Textzeilen
     lines = text_input.split('\n')
     current_uld = None
 
@@ -45,26 +50,23 @@ if uploaded_file is not None:
         if not line_clean:
             continue
 
-        # Prüfen, ob ULD in der Zeile vorkommt
         uld_match = uld_pattern.search(line_clean)
         if uld_match:
             current_uld = uld_match.group(1)
 
-        # Prüfen, ob AWB in der Zeile vorkommt
         awb_match = awb_pattern.search(line_clean)
         if awb_match and current_uld:
             awb_no = awb_match.group(1)
-            # Einfaches Auslesen von Stückzahl / Sondermeldungen falls vorhanden
             ulds[current_uld]['awbs'].append({
                 'awb': awb_no,
-                'pcs': '1', # Standardwert, falls nicht im OCR erkannt
+                'pcs': '1',
                 'special': '-'
             })
 
     if ulds:
         st.success(f"Gefundene ULDs: {len(ulds)}")
         
-        # 2. Generierung des HTML/PDF Layouts
+        # HTML/CSS Styling
         css_style = """
         <style>
             @page { size: A4 portrait; margin: 4mm 5mm; }
@@ -88,7 +90,6 @@ if uploaded_file is not None:
                     <td class="center" style="font-size: 8pt;">{a['special']}</td>
                 </tr>
                 """
-            # Auffüllen leerer Zeilen
             for _ in range(max(0, 32 - len(item['awbs']))):
                 awb_rows += '<tr><td style="height: 18.5px;"></td><td></td><td></td></tr>'
 
@@ -135,15 +136,16 @@ if uploaded_file is not None:
 
         full_html = f"<!DOCTYPE html><html><head><meta charset='UTF-8'>{css_style}</head><body>{''.join(html_pages)}</body></html>"
 
-        # PDF per WeasyPrint erzeugen
+        # PDF erzeugen
         pdf_bytes = HTML(string=full_html).write_pdf()
 
-        # Download-Button anzeigen
+        # Download-Button mit festem Key
         st.download_button(
             label="📄 Fertiges ULD-Statement PDF herunterladen",
             data=pdf_bytes,
             file_name="ULD_Statements_Export.pdf",
-            mime="application/pdf"
+            mime="application/pdf",
+            key="pdf_download_btn"
         )
     else:
-        st.warning("Keine gültigen ULD-Nummern oder AWBs im Bild erkannt. Bitte passe den Text im Feld manuell an.")
+        st.warning("Keine gültigen ULD-Nummern oder AWBs im Bild erkannt. Bitte passe den Text im Feld oben manuell an.")
